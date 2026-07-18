@@ -408,9 +408,13 @@ esp_err_t esp_psram_impl_enable(void)
 {
 #if SOC_CLK_MPLL_SUPPORTED
     periph_rtc_mpll_acquire();
+    /* Wait for MPLL LDO to stabilize after power-on (busy-wait) */
+    for (volatile int d = 0; d < 200000; d++) { }
     uint32_t real_mpll_freq = 0;
     periph_rtc_mpll_freq_set(AP_HEX_PSRAM_MPLL_DEFAULT_FREQ_MHZ * 1000000, &real_mpll_freq);
     ESP_EARLY_LOGD(TAG, "real_mpll_freq: %d", real_mpll_freq);
+    /* Wait for MPLL to lock */
+    for (volatile int d = 0; d < 40000; d++) { }
 #endif
 
     PERIPH_RCC_ATOMIC() {
@@ -449,7 +453,19 @@ esp_err_t esp_psram_impl_enable(void)
 #endif
     s_init_psram_mode_reg(PSRAM_CTRLR_LL_MSPI_ID_3, &mode_reg);
 
-    if (s_check_psram_connected(PSRAM_CTRLR_LL_MSPI_ID_3) != ESP_OK) {
+    /* PSRAM may need time to stabilize after power-up and clock configuration.
+     * Retry connection check with delays between attempts.
+     * Use busy-wait instead of ets_delay_us as systimer may not be ready.
+     */
+    esp_err_t conn_ret = ESP_FAIL;
+    for (int retry = 0; retry < 5; retry++) {
+        conn_ret = s_check_psram_connected(PSRAM_CTRLR_LL_MSPI_ID_3);
+        if (conn_ret == ESP_OK) {
+            break;
+        }
+        for (volatile int d = 0; d < 40000; d++) { }
+    }
+    if (conn_ret != ESP_OK) {
         ESP_EARLY_LOGE(TAG, "PSRAM chip is not connected");
         return ESP_ERR_NOT_SUPPORTED;
     }

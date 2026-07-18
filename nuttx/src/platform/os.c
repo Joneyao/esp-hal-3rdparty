@@ -28,6 +28,7 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #include <nuttx/sched.h>
 #include <nuttx/mm/mm.h>
 
@@ -1335,9 +1336,7 @@ int esp_os_create_task_pinned_to_core(esp_os_task_function_t task_func,
 
   tcb->flags = TCB_FLAG_TTYPE_KERNEL | TCB_FLAG_FREE_TCB;
 
-  ret = nxtask_init(tcb, name, priority,
-                    NULL, stack_size,
-                    task_wrapper_entry, argv, NULL, NULL);
+  ret = nxtask_init(tcb, name, task_wrapper_entry, NULL, NULL, argv, NULL);
   if (ret < 0)
     {
       kmm_free(wrapper_args);

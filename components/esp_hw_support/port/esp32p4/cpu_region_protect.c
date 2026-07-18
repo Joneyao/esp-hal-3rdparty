@@ -158,6 +158,23 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
 
     const size_t available_psram_heap = esp_psram_get_heap_size_to_protect();
 
+    /* NuttX fix: When cpu_region_protect runs BEFORE esp_psram_init() (as in
+     * the NuttX boot sequence), available_psram_heap is 0 because PSRAM is not
+     * yet initialized. Using TOR with size=0 would create an empty region,
+     * leaving the entire EXTRAM inaccessible and causing an Access Fault when
+     * PSRAM init tries to access the mapped address range.
+     *
+     * Fallback: use NAPOT to cover the full EXTRAM range with RW permission,
+     * allowing PSRAM initialization and subsequent heap registration to succeed.
+     */
+    if (available_psram_heap == 0) {
+        const uint32_t pmpaddr_extram = PMPADDR_NAPOT(SOC_EXTRAM_LOW, SOC_EXTRAM_HIGH);
+        PMP_RESET_AND_ENTRY_SET(10, pmpaddr_extram, PMP_NAPOT | RW);
+
+        const uint32_t pmpaddr_extram_nc = PMPADDR_NAPOT(CACHE_LL_L2MEM_NON_CACHE_ADDR(SOC_EXTRAM_LOW), CACHE_LL_L2MEM_NON_CACHE_ADDR(SOC_EXTRAM_HIGH));
+        PMP_RESET_AND_ENTRY_SET(15, pmpaddr_extram_nc, PMP_NAPOT | RW);
+    } else {
+
     PMP_ENTRY_SET_CACHED_AND_UNCACHED(10, 15, SOC_EXTRAM_LOW, NONE);
 
 #if CONFIG_SPIRAM_FETCH_INSTRUCTIONS && CONFIG_SPIRAM_RODATA
@@ -178,6 +195,7 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
 #else
     PMP_ENTRY_SET_CACHED_AND_UNCACHED(11, 16, ALIGN_UP(SOC_EXTRAM_LOW + available_psram_heap, SOC_CPU_PMP_REGION_GRANULARITY), PMP_TOR | RW);
 #endif
+    } /* end if (available_psram_heap != 0) */
 #endif /* CONFIG_SPIRAM && CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION */
 
     // ESP32-P4 V3's 24th PMP entry cannot be used as a TOR entry // DIG-752
@@ -224,10 +242,17 @@ static void esp_cpu_configure_region_protection_rev_v3(void)
     PMP_RESET_AND_ENTRY_SET(29, (int)&_rtc_text_start, PMP_TOR | RW);
 #endif
     PMP_RESET_AND_ENTRY_SET(30, (int)&_rtc_text_end, PMP_TOR | RX);
-    PMP_RESET_AND_ENTRY_SET(31, SOC_RTC_IRAM_HIGH, PMP_TOR | RW);
+    /* NuttX fix: Extend LP memory PMP to cover LP peripherals (PMU LDO regs etc.)
+     * Original code only covered up to SOC_RTC_IRAM_HIGH, leaving LP peripheral
+     * registers (needed by DSI/PSRAM LDO init) unprotected → Access Fault.
+     */
+    PMP_RESET_AND_ENTRY_SET(31, SOC_LP_PERIPH_HIGH, PMP_TOR | RW);
 #else
-    const uint32_t pmpaddr28 = PMPADDR_NAPOT(SOC_RTC_IRAM_LOW, SOC_RTC_IRAM_HIGH);
-    PMP_RESET_AND_ENTRY_SET(28, pmpaddr28, PMP_NAPOT | CONDITIONAL_RWX);
+    /* Cover both LP SRAM (SOC_RTC_IRAM_LOW..SOC_RTC_IRAM_HIGH) and
+     * LP peripherals (SOC_RTC_IRAM_HIGH..SOC_LP_PERIPH_HIGH) using TOR.
+     */
+    PMP_RESET_AND_ENTRY_SET(28, SOC_RTC_IRAM_LOW, CONDITIONAL_NONE);
+    PMP_RESET_AND_ENTRY_SET(29, SOC_LP_PERIPH_HIGH, PMP_TOR | CONDITIONAL_RWX);
     _Static_assert(SOC_RTC_IRAM_LOW < SOC_RTC_IRAM_HIGH, "Invalid RTC IRAM region");
 #endif
 }

@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <semaphore.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
 #include <nuttx/sched.h>
 #include <nuttx/init.h>
 #include <sched/sched.h>
@@ -354,7 +355,7 @@ static inline void esp_os_task_delay_adapter(uint32_t ticks)
   if (OSINIT_OS_READY())
     {
       useconds_t us = TICK2USEC(ticks);
-      nxsched_usleep(us);
+      nxsig_usleep(us);
     }
 }
 
