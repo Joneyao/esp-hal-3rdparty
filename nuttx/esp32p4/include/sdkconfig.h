@@ -907,6 +907,11 @@
 #  define CONFIG_SPIRAM_SPEED 200
 #endif
 
+/* Ensure CONFIG_SPIRAM_SPEED always has a default value for HAL code */
+#ifndef CONFIG_SPIRAM_SPEED
+#  define CONFIG_SPIRAM_SPEED 200
+#endif
+
 /* SPI Flash related configs */
 
 #if defined(CONFIG_ESPRESSIF_FLASH_MODE_QIO)
