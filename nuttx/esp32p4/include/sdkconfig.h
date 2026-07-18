@@ -837,21 +837,6 @@
 #endif
 
 /* SPIRAM related configs */
-/* NOTE: CONFIG_SPIRAM must be defined unconditionally here because HAL source
- * files (clk.c, esp_psram_impl_ap_hex.c, etc.) include sdkconfig.h before
- * nuttx/config.h. The NuttX kconfig CONFIG_ESPRESSIF_SPIRAM is NOT visible
- * at that point. Without CONFIG_SPIRAM, esp_perip_clk_init() will disable
- * the PSRAM MSPI clock, causing PSRAM initialization to fail.
- */
-#define CONFIG_SPIRAM 1
-#define CONFIG_SPIRAM_MODE_HEX 1
-#define CONFIG_ESP_LDO_RESERVE_PSRAM 1
-#define CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN 2
-#define CONFIG_ESP_LDO_VOLTAGE_PSRAM_1800_MV 1
-#define CONFIG_ESP_LDO_VOLTAGE_PSRAM_DOMAIN 1800
-#define CONFIG_SPIRAM_BOOT_INIT 1
-#define CONFIG_SPIRAM_BOOT_HW_INIT 1
-#define CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION 1
 
 #if defined(CONFIG_ESPRESSIF_SPIRAM)
 #  define CONFIG_ESP_LDO_VOLTAGE_PSRAM_1800_MV 1
