@@ -839,6 +839,7 @@
 /* SPIRAM related configs */
 
 #if defined(CONFIG_ESPRESSIF_SPIRAM)
+#  define CONFIG_SPIRAM 1
 #  define CONFIG_ESP_LDO_VOLTAGE_PSRAM_1800_MV 1
 #  define CONFIG_ESP_LDO_VOLTAGE_PSRAM_DOMAIN 1800
 #endif
