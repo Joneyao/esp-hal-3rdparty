@@ -838,8 +838,18 @@
 
 /* SPIRAM related configs */
 
+/* NOTE: CONFIG_SPIRAM must be unconditionally defined for HAL code.
+ * esp_perip_clk_init() uses #if !CONFIG_SPIRAM to disable PSRAM clock.
+ * Without this, PSRAM MSPI clock gets disabled even when SPIRAM is enabled.
+ */
+#define CONFIG_SPIRAM 1
+#define CONFIG_SPIRAM_MODE_HEX 1
+#define CONFIG_SPIRAM_BOOT_INIT 1
+#define CONFIG_SPIRAM_BOOT_HW_INIT 1
+#define CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION 1
+
 #if defined(CONFIG_ESPRESSIF_SPIRAM)
-#  define CONFIG_SPIRAM 1
+/* already defined unconditionally above */
 #  define CONFIG_ESP_LDO_VOLTAGE_PSRAM_1800_MV 1
 #  define CONFIG_ESP_LDO_VOLTAGE_PSRAM_DOMAIN 1800
 #endif
