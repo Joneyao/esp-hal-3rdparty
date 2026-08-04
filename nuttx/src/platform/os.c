@@ -16,6 +16,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <sched.h>
+#include <spawn.h>
 #include <clock/clock.h>
 
 #include <nuttx/config.h>
@@ -1312,7 +1315,27 @@ int esp_os_create_task_pinned_to_core(esp_os_task_function_t task_func,
   FAR struct task_wrapper_args_s *wrapper_args;
   FAR char *argv[2];
   char ptr_buf[32];
+  posix_spawnattr_t attr;
   int ret;
+
+  /* nxtask_init() dereferences the spawn attributes unconditionally to pick
+   * up the stack size, the (optional) pre-allocated stack and the priority.
+   * Passing NULL faults, so always hand it a fully initialized structure.
+   */
+
+  memset(&attr, 0, sizeof(attr));
+  attr.policy    = SCHED_FIFO;
+  attr.stacksize = stack_size > 0 ? stack_size : CONFIG_DEFAULT_TASK_STACKSIZE;
+  attr.priority  = priority;
+
+  if (attr.priority < SCHED_PRIORITY_MIN)
+    {
+      attr.priority = SCHED_PRIORITY_DEFAULT;
+    }
+  else if (attr.priority > SCHED_PRIORITY_MAX)
+    {
+      attr.priority = SCHED_PRIORITY_MAX;
+    }
 
   wrapper_args = kmm_zalloc(sizeof(struct task_wrapper_args_s));
   if (wrapper_args == NULL)
@@ -1336,7 +1359,7 @@ int esp_os_create_task_pinned_to_core(esp_os_task_function_t task_func,
 
   tcb->flags = TCB_FLAG_TTYPE_KERNEL | TCB_FLAG_FREE_TCB;
 
-  ret = nxtask_init(tcb, name, task_wrapper_entry, NULL, NULL, argv, NULL);
+  ret = nxtask_init(tcb, name, task_wrapper_entry, NULL, &attr, argv, NULL);
   if (ret < 0)
     {
       kmm_free(wrapper_args);
