@@ -23,6 +23,8 @@
 #include "jpeg_private.h"
 #include "driver/jpeg_encode.h"
 #include "private/jpeg_param.h"
+extern void dbg_putc(int ch);
+#define DPUT(c) dbg_putc(c)
 #include "private/jpeg_emit_marker.h"
 #include "esp_check.h"
 #include "esp_cache.h"
@@ -84,6 +86,7 @@ esp_err_t jpeg_new_encoder_engine(const jpeg_encode_engine_cfg_t *enc_eng_cfg, j
 
     encoder_engine = (jpeg_encoder_handle_t)heap_caps_calloc(1, sizeof(jpeg_encoder_t), MALLOC_CAP_8BIT);
     ESP_RETURN_ON_FALSE(encoder_engine, ESP_ERR_NO_MEM, TAG, "no memory for jpeg encoder");
+    DPUT('J'); DPUT('0');
 
     uint32_t cache_line_size = cache_hal_get_cache_line_size(CACHE_LL_LEVEL_EXT_MEM, CACHE_TYPE_DATA);
     uint32_t alignment = cache_line_size;
@@ -94,11 +97,13 @@ esp_err_t jpeg_new_encoder_engine(const jpeg_encode_engine_cfg_t *enc_eng_cfg, j
     encoder_engine->txlink = (dma2d_descriptor_t*)heap_caps_aligned_calloc(alignment, 1, sizeof(dma2d_descriptor_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | JPEG_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(encoder_engine->txlink, ESP_ERR_NO_MEM, err, TAG, "no memory for jpeg encoder txlink");
     encoder_engine->dma_desc_size = dma_desc_mem_size;
+    DPUT('J'); DPUT('1');
 
     ESP_GOTO_ON_ERROR(jpeg_acquire_codec_handle(&encoder_engine->codec_base), err, TAG, "JPEG encoder acquires codec handle failed");
     jpeg_hal_context_t *hal = &encoder_engine->codec_base->hal;
     encoder_engine->evt_queue = xQueueCreateWithCaps(2, sizeof(jpeg_enc_dma2d_evt_t), JPEG_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(encoder_engine->evt_queue, ESP_ERR_NO_MEM, err, TAG, "No memory for event queue");
+    DPUT('J'); DPUT('2');
 
     encoder_engine->timeout_tick = (enc_eng_cfg->timeout_ms == -1) ? portMAX_DELAY : pdMS_TO_TICKS(enc_eng_cfg->timeout_ms);
     jpeg_ll_clear_intr_mask(hal->dev, JPEG_LL_ENCODER_EVENT_INTR);
@@ -111,20 +116,24 @@ esp_err_t jpeg_new_encoder_engine(const jpeg_encode_engine_cfg_t *enc_eng_cfg, j
     if (enc_eng_cfg->intr_priority) {
         isr_flags |= 1 << (enc_eng_cfg->intr_priority);
     }
+    DPUT('J'); DPUT('3');
 
     ret = jpeg_isr_register(encoder_engine->codec_base, jpeg_encoder_isr_handle_default, encoder_engine, JPEG_LL_ENCODER_EVENT_INTR, isr_flags, &encoder_engine->intr_handle);
     ESP_GOTO_ON_ERROR(ret, err, TAG, "install jpeg decode interrupt failed");
+    DPUT('J'); DPUT('4');
 
     dma2d_pool_config_t dma2d_group_config = {
         .pool_id = 0,
     };
     ESP_ERROR_CHECK(dma2d_acquire_pool(&dma2d_group_config, &encoder_engine->dma2d_group_handle));
+    DPUT('J'); DPUT('5');
 
     encoder_engine->trans_desc = (dma2d_trans_t *)heap_caps_calloc(1, SIZEOF_DMA2D_TRANS_T, JPEG_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(encoder_engine->trans_desc, ESP_ERR_NO_MEM, err, TAG, "No memory for dma2d descriptor");
 
     encoder_engine->header_info = (jpeg_enc_header_info_t*)heap_caps_calloc(1, sizeof(jpeg_enc_header_info_t), JPEG_MEM_ALLOC_CAPS);
     ESP_GOTO_ON_FALSE(encoder_engine->header_info, ESP_ERR_NO_MEM, err, TAG, "no memory for jpeg header information structure");
+    DPUT('J'); DPUT('6');
 
 #if JPEG_USE_RETENTION_LINK
     if (enc_eng_cfg->flags.allow_pd != 0) {
