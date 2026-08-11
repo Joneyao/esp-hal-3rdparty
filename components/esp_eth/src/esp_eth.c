@@ -215,7 +215,11 @@ esp_err_t esp_eth_driver_install(const esp_eth_config_t *config, esp_eth_handle_
         .arg = eth_driver,
         .skip_unhandled_events = true
     };
-    ESP_GOTO_ON_ERROR(esp_timer_create(&check_link_timer_args, &eth_driver->check_link_timer), err, TAG, "create link timer failed");
+    if (esp_timer_create(&check_link_timer_args, &eth_driver->check_link_timer) != ESP_OK)
+    {
+        ESP_LOGW(TAG, "create link timer failed, link status polling disabled");
+        eth_driver->check_link_timer = NULL;
+    }
 #if CONFIG_ETH_TRANSMIT_MUTEX
     esp_os_create_mutex(&eth_driver->transmit_mutex);
 #endif // CONFIG_ETH_TRANSMIT_MUTEX
@@ -284,7 +288,10 @@ esp_err_t esp_eth_driver_uninstall(esp_eth_handle_t hdl)
                       ESP_ERR_INVALID_STATE, err, TAG, "%d ethernet reference in use", expected_ref_count);
     esp_eth_mac_t *mac = eth_driver->mac;
     esp_eth_phy_t *phy = eth_driver->phy;
-    ESP_GOTO_ON_ERROR(esp_timer_delete(eth_driver->check_link_timer), err, TAG, "delete link timer failed");
+    if (eth_driver->check_link_timer)
+    {
+        ESP_GOTO_ON_ERROR(esp_timer_delete(eth_driver->check_link_timer), err, TAG, "delete link timer failed");
+    }
 #if CONFIG_ETH_TRANSMIT_MUTEX
     esp_os_delete_mutex(&eth_driver->transmit_mutex);
 #endif // CONFIG_ETH_TRANSMIT_MUTEX
@@ -312,8 +319,11 @@ esp_err_t esp_eth_start(esp_eth_handle_t hdl)
     ESP_GOTO_ON_ERROR(esp_event_post(ETH_EVENT, ETHERNET_EVENT_START, &eth_driver, sizeof(esp_eth_driver_t *), 0),
                       err, TAG, "send ETHERNET_EVENT_START event failed");
     ESP_GOTO_ON_ERROR(phy->get_link(phy), err, TAG, "phy get link status failed");
-    ESP_GOTO_ON_ERROR(esp_timer_start_periodic(eth_driver->check_link_timer, eth_driver->check_link_period_ms * 1000),
-                      err, TAG, "start link timer failed");
+    if (eth_driver->check_link_timer)
+    {
+        ESP_GOTO_ON_ERROR(esp_timer_start_periodic(eth_driver->check_link_timer, eth_driver->check_link_period_ms * 1000),
+                          err, TAG, "start link timer failed");
+    }
 err:
     return ret;
 }
@@ -328,7 +338,10 @@ esp_err_t esp_eth_stop(esp_eth_handle_t hdl)
     esp_eth_fsm_t expected_fsm = ESP_ETH_FSM_START;
     ESP_GOTO_ON_FALSE(atomic_compare_exchange_strong(&eth_driver->fsm, &expected_fsm, ESP_ETH_FSM_STOP),
                       ESP_ERR_INVALID_STATE, err, TAG, "driver not started yet");
-    ESP_GOTO_ON_ERROR(esp_timer_stop(eth_driver->check_link_timer), err, TAG, "stop link timer failed");
+    if (eth_driver->check_link_timer)
+    {
+        ESP_GOTO_ON_ERROR(esp_timer_stop(eth_driver->check_link_timer), err, TAG, "stop link timer failed");
+    }
 
     eth_link_t expected_link = ETH_LINK_UP;
     if (atomic_compare_exchange_strong(&eth_driver->link, &expected_link, ETH_LINK_DOWN)){
