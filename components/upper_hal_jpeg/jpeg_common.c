@@ -188,7 +188,16 @@ esp_err_t jpeg_isr_register(jpeg_codec_handle_t jpeg_codec, intr_handler_t handl
 {
     if (jpeg_codec->intr_handle == NULL) {
         // The jpeg codec interrupt has not been allocated.
-        esp_err_t err = esp_intr_alloc_intrstatus(ETS_JPEG_INTR_SOURCE, flags, (uint32_t)jpeg_ll_get_interrupt_status_reg(jpeg_codec->hal.dev), JPEG_LL_DECODER_EVENT_INTR | JPEG_LL_ENCODER_EVENT_INTR, &jpeg_isr, jpeg_codec, &jpeg_codec->intr_handle);
+        // NOTE: allocate it as a non-shared interrupt.  jpeg_isr() itself
+        // reads the JPEG intrstatus register and demultiplexes to the
+        // registered handlers, so the ESP-HAL shared-intrstatus layer is
+        // redundant.  More importantly, the shared (esp_intr_alloc_intrstatus)
+        // path does not route the interrupt correctly under NuttX and the
+        // JPEG encoder completion interrupt never reaches the CPU.
+        esp_err_t err = esp_intr_alloc(ETS_JPEG_INTR_SOURCE,
+                                       flags & ~ESP_INTR_FLAG_SHARED,
+                                       &jpeg_isr, jpeg_codec,
+                                       &jpeg_codec->intr_handle);
         if (err != ESP_OK) {
             return err;
         }

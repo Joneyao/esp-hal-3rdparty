@@ -438,10 +438,9 @@ esp_err_t dma2d_acquire_pool(const dma2d_pool_config_t *config, dma2d_pool_handl
         for (int i = 0; i < DMA2D_LL_GET(RX_CHANS_PER_INST); i++) {
             dma2d_rx_channel_t *rx_chan = s_platform.groups[group_id]->rx_chans[i];
             if (rx_chan->base.intr == NULL) {
-                ret = esp_intr_alloc_intrstatus(dma2d_periph_signals.groups[group_id].rx_irq_id[i],
-                                                intr_flags,
-                                                (uint32_t)dma2d_ll_rx_get_interrupt_status_reg(s_platform.groups[group_id]->hal.dev, i),
-                                                DMA2D_LL_RX_EVENT_MASK, dma2d_default_isr, &rx_chan->base, &rx_chan->base.intr);
+                ret = esp_intr_alloc(dma2d_periph_signals.groups[group_id].rx_irq_id[i],
+                                     intr_flags & ~ESP_INTR_FLAG_SHARED,
+                                     dma2d_default_isr, &rx_chan->base, &rx_chan->base.intr);
                 if (ret != ESP_OK) {
                     ret = ESP_FAIL;
                     ESP_LOGE(TAG, "alloc interrupt failed on rx channel (%d, %d)", group_id, i);
@@ -453,10 +452,9 @@ esp_err_t dma2d_acquire_pool(const dma2d_pool_config_t *config, dma2d_pool_handl
         for (int i = 0; i < DMA2D_LL_GET(TX_CHANS_PER_INST); i++) {
             dma2d_tx_channel_t *tx_chan = s_platform.groups[group_id]->tx_chans[i];
             if (tx_chan->base.intr == NULL) {
-                ret = esp_intr_alloc_intrstatus(dma2d_periph_signals.groups[group_id].tx_irq_id[i],
-                                                intr_flags,
-                                                (uint32_t)dma2d_ll_tx_get_interrupt_status_reg(s_platform.groups[group_id]->hal.dev, i),
-                                                DMA2D_LL_TX_EVENT_MASK, dma2d_default_isr, &tx_chan->base, &tx_chan->base.intr);
+                ret = esp_intr_alloc(dma2d_periph_signals.groups[group_id].tx_irq_id[i],
+                                     intr_flags & ~ESP_INTR_FLAG_SHARED,
+                                     dma2d_default_isr, &tx_chan->base, &tx_chan->base.intr);
                 if (ret != ESP_OK) {
                     ret = ESP_FAIL;
                     ESP_LOGE(TAG, "alloc interrupt failed on tx channel (%d, %d)", group_id, i);
