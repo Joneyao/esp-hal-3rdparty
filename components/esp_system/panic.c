@@ -458,6 +458,18 @@ void esp_panic_handler(panic_info_t *info)
 #endif /* CONFIG_ESP_SYSTEM_PANIC_GDBSTUB */
 }
 
+#ifdef __NuttX__
+/* NuttX's own panic entry point. Forward-declared directly instead of
+ * #include <assert.h>: this translation unit (and others pulled in via
+ * the same compile) resolve <assert.h> to ESP-IDF's
+ * esp_libc/platform_include/assert.h (which defines its own `assert()`
+ * macro under the same standard header name), so including NuttX's
+ * assert.h here would either not take effect or fight that definition.
+ */
+void _assert(const char *filename, int linenum, const char *msg,
+             void *regs, bool irq) __attribute__((noreturn));
+#endif
+
 void __attribute__((noreturn, no_sanitize_undefined)) panic_abort(const char *details)
 {
     g_panic_abort = true;
@@ -467,6 +479,27 @@ void __attribute__((noreturn, no_sanitize_undefined)) panic_abort(const char *de
     esp_trace_panic_handler(NULL);
 #endif
 
+#ifdef __NuttX__
+    /* The illegal-instruction trap below is ESP-IDF's native mechanism:
+     * it relies on the SoC's own exception handler, running outside (and
+     * independently of) whatever context triggered the assert, to print
+     * diagnostics and reset safely -- including from inside an ISR.
+     * Under NuttX, that same illegal instruction instead traps into
+     * NuttX's RISC-V exception dispatch, which may itself be invoked
+     * while the CPU is already mid-ISR (e.g. an assert() firing inside
+     * DMA2D's RX completion handler, upper_hal_dma/src/dma2d.c). This
+     * project has repeatedly hit CLIC nested-exception/interrupt corner
+     * cases in exactly that situation before (MIE left cleared forever
+     * after an ecall-during-interrupt, MPP corrupted on return from a
+     * nested exception) -- both previously diagnosed as full, otherwise
+     * unrecoverable system lockups rather than a clean panic. Call
+     * straight into NuttX's own panic entry point instead: it is a
+     * plain C function (no hardware trap, no exception-dispatch corner
+     * case) and is itself engineered to be interrupt-context-safe (its
+     * syslog flush path uses spin_lock_irqsave, not a blocking mutex).
+     */
+    _assert(__FILE__, __LINE__, details, NULL, true);
+#else
 #ifdef __XTENSA__
     asm("ill");     // should be an invalid operation on xtensa targets
 #elif __riscv
@@ -474,6 +507,7 @@ void __attribute__((noreturn, no_sanitize_undefined)) panic_abort(const char *de
 #endif
 
     ESP_INFINITE_LOOP();
+#endif /* __NuttX__ */
 }
 
 /* Weak versions of reset reason hint functions.
