@@ -329,6 +329,13 @@ esp_err_t jpeg_del_encoder_engine(jpeg_encoder_handle_t encoder_engine)
     ESP_RETURN_ON_FALSE(encoder_engine, ESP_ERR_INVALID_ARG, TAG, "jpeg encoder handle is null");
 
     if (encoder_engine) {
+        /* TEMPORARY diagnostic: trace jpeg_del_encoder_engine()'s teardown
+         * stages via the RAM-marker DPUT() mechanism (same one used for the
+         * J0-J6 creation trace above), so a post-hang boot can show exactly
+         * which teardown step never returned.  Remove once the teardown
+         * hang investigation is closed. */
+        DPUT('D'); DPUT('0');
+
         /* Silence every interrupt source that can still write into this
          * engine's state BEFORE freeing any of that state.  The JPEG
          * peripheral interrupt (demultiplexed through jpeg_isr(), which
@@ -345,26 +352,33 @@ esp_err_t jpeg_del_encoder_engine(jpeg_encoder_handle_t encoder_engine)
         if (encoder_engine->intr_handle) {
             jpeg_isr_deregister(encoder_engine->codec_base, encoder_engine->intr_handle);
         }
+        DPUT('D'); DPUT('1');
         if (encoder_engine->dma2d_group_handle) {
             dma2d_release_pool(encoder_engine->dma2d_group_handle);
         }
+        DPUT('D'); DPUT('2');
         if (encoder_engine->evt_queue) {
             vQueueDeleteWithCaps(encoder_engine->evt_queue);
         }
+        DPUT('D'); DPUT('3');
         if (encoder_engine->rxlink) {
             free(encoder_engine->rxlink);
         }
         if (encoder_engine->txlink) {
             free(encoder_engine->txlink);
         }
+        DPUT('D'); DPUT('4');
         if (encoder_engine->header_info) {
             free(encoder_engine->header_info);
         }
         if (encoder_engine->trans_desc) {
             free(encoder_engine->trans_desc);
         }
+        DPUT('D'); DPUT('5');
         ESP_RETURN_ON_ERROR(jpeg_release_codec_handle(encoder_engine->codec_base), TAG, "release codec failed");
+        DPUT('D'); DPUT('6');
         free(encoder_engine);
+        DPUT('D'); DPUT('7');
     }
     return ESP_OK;
 }
