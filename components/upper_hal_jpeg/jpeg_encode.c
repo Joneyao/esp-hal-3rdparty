@@ -336,6 +336,18 @@ esp_err_t jpeg_del_encoder_engine(jpeg_encoder_handle_t encoder_engine)
          * hang investigation is closed. */
         DPUT('D'); DPUT('0');
 
+        /* TEMPORARY diagnostic: record this engine's JPEG-peripheral
+         * cpuint right before it gets freed below, so a post-hang boot
+         * dump can compare it against the USB-Serial-JTAG console's own
+         * cpuint (recorded at 0x5010ff40 in esp_usbserial.c) -- if they
+         * match, esp_intr_free() here would silently disable the
+         * console's interrupt. Remove once the close()-hang
+         * investigation is closed. */
+        if (encoder_engine->intr_handle) {
+            *((volatile uint32_t *)0x5010ff48) =
+                (uint32_t)esp_intr_get_intno(encoder_engine->intr_handle);
+        }
+
         /* Silence every interrupt source that can still write into this
          * engine's state BEFORE freeing any of that state.  The JPEG
          * peripheral interrupt (demultiplexed through jpeg_isr(), which
