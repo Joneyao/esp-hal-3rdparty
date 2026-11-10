@@ -23,6 +23,7 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "hal/jpeg_periph.h"
+#include "esp_private/critical_section.h"
 #if JPEG_USE_RETENTION_LINK
 #include "esp_private/sleep_retention.h"
 #endif
@@ -176,11 +177,19 @@ static void jpeg_isr(void* arg)
     jpeg_codec_handle_t jpeg_codec = (jpeg_codec_handle_t) arg;
     uint32_t status = jpeg_ll_get_intr_status(jpeg_codec->hal.dev);
     jpeg_isr_handler_t* it;
+
+    /* jpeg_isr_handler_list is also mutated by jpeg_isr_register()/
+     * jpeg_isr_deregister() from task context (e.g. during teardown);
+     * take jpeg_codec->spinlock so this traversal can't run concurrently
+     * with a SLIST_INSERT_HEAD/SLIST_REMOVE_* that is still mid-update.
+     */
+    esp_os_enter_critical_safe(&jpeg_codec->spinlock);
     SLIST_FOREACH(it, &jpeg_codec->jpeg_isr_handler_list, next) {
         if (it->mask & status) {
             (*it->handler)(it->handler_arg);
         }
     }
+    esp_os_exit_critical_safe(&jpeg_codec->spinlock);
     jpeg_ll_clear_intr_mask(jpeg_codec->hal.dev, status);
 }
 
@@ -211,7 +220,9 @@ esp_err_t jpeg_isr_register(jpeg_codec_handle_t jpeg_codec, intr_handler_t handl
     item->handler_arg = handler_arg;
     item->mask = jpeg_intr_mask;
     item->flags = flags;
+    esp_os_enter_critical_safe(&jpeg_codec->spinlock);
     SLIST_INSERT_HEAD(&jpeg_codec->jpeg_isr_handler_list, item, next);
+    esp_os_exit_critical_safe(&jpeg_codec->spinlock);
     *jpeg_intr_handler = item;
     return ESP_OK;
 }
@@ -221,6 +232,7 @@ esp_err_t jpeg_isr_deregister(jpeg_codec_handle_t jpeg_codec, jpeg_isr_handler_t
     jpeg_isr_handler_t* it;
     jpeg_isr_handler_t* prev = NULL;
     bool found = false;
+    esp_os_enter_critical_safe(&jpeg_codec->spinlock);
     SLIST_FOREACH(it, &jpeg_codec->jpeg_isr_handler_list, next) {
         if (it == jpeg_intr_handler) {
             if (it == SLIST_FIRST(&jpeg_codec->jpeg_isr_handler_list)) {
@@ -233,6 +245,7 @@ esp_err_t jpeg_isr_deregister(jpeg_codec_handle_t jpeg_codec, jpeg_isr_handler_t
         }
         prev = it;
     }
+    esp_os_exit_critical_safe(&jpeg_codec->spinlock);
     if (found) {
         free(it);
     }

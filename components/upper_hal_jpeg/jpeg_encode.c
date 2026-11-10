@@ -329,6 +329,28 @@ esp_err_t jpeg_del_encoder_engine(jpeg_encoder_handle_t encoder_engine)
     ESP_RETURN_ON_FALSE(encoder_engine, ESP_ERR_INVALID_ARG, TAG, "jpeg encoder handle is null");
 
     if (encoder_engine) {
+        /* Silence every interrupt source that can still write into this
+         * engine's state BEFORE freeing any of that state.  The JPEG
+         * peripheral interrupt (demultiplexed through jpeg_isr(), which
+         * walks codec_base->jpeg_isr_handler_list and can call back into
+         * encoder_engine->evt_queue) and the DMA2D channel interrupts both
+         * target evt_queue, so evt_queue must be the LAST thing freed, not
+         * the first — freeing it first leaves a window where a late
+         * interrupt does xQueueSendFromISR() on freed heap memory (NuttX:
+         * file_mq_send() on a freed mq_adpt).  jpeg_isr_deregister() is
+         * what actually calls esp_intr_free() on the JPEG peripheral
+         * interrupt, so it must run before dma2d_release_pool() and
+         * vQueueDeleteWithCaps() too.
+         */
+        if (encoder_engine->intr_handle) {
+            jpeg_isr_deregister(encoder_engine->codec_base, encoder_engine->intr_handle);
+        }
+        if (encoder_engine->dma2d_group_handle) {
+            dma2d_release_pool(encoder_engine->dma2d_group_handle);
+        }
+        if (encoder_engine->evt_queue) {
+            vQueueDeleteWithCaps(encoder_engine->evt_queue);
+        }
         if (encoder_engine->rxlink) {
             free(encoder_engine->rxlink);
         }
@@ -340,15 +362,6 @@ esp_err_t jpeg_del_encoder_engine(jpeg_encoder_handle_t encoder_engine)
         }
         if (encoder_engine->trans_desc) {
             free(encoder_engine->trans_desc);
-        }
-        if (encoder_engine->evt_queue) {
-            vQueueDeleteWithCaps(encoder_engine->evt_queue);
-        }
-        if (encoder_engine->dma2d_group_handle) {
-            dma2d_release_pool(encoder_engine->dma2d_group_handle);
-        }
-        if (encoder_engine->intr_handle) {
-            jpeg_isr_deregister(encoder_engine->codec_base, encoder_engine->intr_handle);
         }
         ESP_RETURN_ON_ERROR(jpeg_release_codec_handle(encoder_engine->codec_base), TAG, "release codec failed");
         free(encoder_engine);
